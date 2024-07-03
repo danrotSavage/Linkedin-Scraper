@@ -41,7 +41,7 @@ def scrape_linkedin_jobs(job_title: str, location: str, pages: int = None) -> li
     pages = pages or 1
 
     # Set up the Selenium web driver
-    driver = webdriver.Chrome("chromedriver.exe")
+    driver = webdriver.Chrome()
 
     # Set up Chrome options to maximize the window
     options = webdriver.ChromeOptions()
@@ -66,7 +66,7 @@ def scrape_linkedin_jobs(job_title: str, location: str, pages: int = None) -> li
 
         try:
             # Wait for the "Show more" button to be present on the page
-            element = WebDriverWait(driver, 5).until(
+            element = WebDriverWait(driver, 1).until(
                 EC.presence_of_element_located(
                     (By.XPATH, "/html/body/div[1]/div/main/section[2]/button")
                 )
@@ -80,7 +80,7 @@ def scrape_linkedin_jobs(job_title: str, location: str, pages: int = None) -> li
             logging.info("Show more button not found, retrying...")
 
         # Wait for a random amount of time before scrolling to the next page
-        time.sleep(random.choice(list(range(3, 7))))
+        time.sleep(1)
 
     # Scrape the job postings
     jobs = []
@@ -92,59 +92,82 @@ def scrape_linkedin_jobs(job_title: str, location: str, pages: int = None) -> li
 
     try:
         for job in job_listings:
-            # Extract job details
-
-            # job title
-            job_title = job.find("h3", class_="base-search-card__title").text.strip()
-            # job company
-            job_company = job.find(
-                "h4", class_="base-search-card__subtitle"
-            ).text.strip()
-            # job location
-            job_location = job.find(
-                "span", class_="job-search-card__location"
-            ).text.strip()
-            # job link
-            apply_link = job.find("a", class_="base-card__full-link")["href"]
-
-            # Navigate to the job posting page and scrape the description
-            driver.get(apply_link)
-
-            # Sleeping randomly
-            time.sleep(random.choice(list(range(5, 11))))
-
-            # Use try-except block to handle exceptions when retrieving job description
             try:
-                # Create a BeautifulSoup object from the webpage source
-                description_soup = BeautifulSoup(driver.page_source, "html.parser")
+                # Extract job details
 
-                # Find the job description element and extract its text
-                job_description = description_soup.find(
-                    "div", class_="description__text description__text--rich"
+                # job title
+                job_title = job.find("h3", class_="base-search-card__title").text.strip()
+                # job company
+                job_company = job.find(
+                    "h4", class_="base-search-card__subtitle"
                 ).text.strip()
-
-            # Handle the AttributeError exception that may occur if the element is not found
-            except AttributeError:
-                # Assign None to the job_description variable to indicate that no description was found
-                job_description = None
-
-                # Write a warning message to the log file
-                logging.warning(
-                    "AttributeError occurred while retrieving job description."
+                # job location
+                job_location = job.find(
+                    "span", class_="job-search-card__location"
+                ).text.strip()
+                # job link
+                apply_link = job.find("a", class_="base-card__full-link")["href"]
+                #job posting date
+                job_date = job.find(
+                    "time", class_="job-search-card__listdate"
                 )
+                #sometimes date has the --new postfix
+                job_date = job_date.text.strip() if (job_date is not None ) else (job.find("time", class_="job-search-card__listdate--new").text.strip())
 
-            # Add job details to the jobs list
-            jobs.append(
-                {
-                    "title": job_title,
-                    "company": job_company,
-                    "location": job_location,
-                    "link": apply_link,
-                    "description": job_description,
-                }
-            )
-            # Logging scrapped job with company and location information
-            logging.info(f'Scraped "{job_title}" at {job_company} in {job_location}...')
+                #apply filters
+                if (filter_by_title(job_title.lower()) or filter_by_date(job_date.lower()) or filter_by_location(job_location.lower())):
+                    continue
+
+
+                # Navigate to the job posting page and scrape the description
+                driver.get(apply_link)
+
+
+                # Use try-except block to handle exceptions when retrieving job description
+                try:
+                    # Create a BeautifulSoup object from the webpage source
+                    description_soup = BeautifulSoup(driver.page_source, "html.parser")
+
+                    # Find the job description element and extract its text
+                    job_description = description_soup.find(
+                        "div", class_="description__text description__text--rich"
+                    ).text.strip()
+
+                    #clean job description
+                    job_description = clean_string(job_description)
+                    if(filter_by_description(job_description.lower())):
+                        continue
+
+                # Handle the AttributeError exception that may occur if the element is not found
+                except AttributeError:
+                    # Assign None to the job_description variable to indicate that no description was found
+                    job_description = None
+
+                    # Write a warning message to the log file
+                    logging.warning(
+                        "AttributeError occurred while retrieving job description."
+                    )
+
+                #job filter here
+
+                # Add job details to the jobs list
+                jobs.append(
+                    {
+                        "title": job_title,
+                        "company": job_company,
+                        "location": job_location,
+                        "description": job_description,
+                        "date": job_date,
+                        "link": apply_link,
+                        "employees": -1,
+                    }
+                )
+                # Logging scrapped job with company and location information
+                logging.info(f'Scraped "{job_title}" at {job_company} in {job_location} from  {job_date}...')
+            #if a single job fails not all should fail.
+            except Exception as e:
+                logging.error(f"An error occurred while scraping jobs: {str(e)}")
+
 
     # Catching any exception that occurs in the scrapping process
     except Exception as e:
@@ -177,11 +200,60 @@ def save_job_data(data: dict) -> None:
     df = pd.DataFrame(data)
 
     # Save the DataFrame to a CSV file without including the index column
-    df.to_csv("jobs.csv", index=False)
+    df.to_csv("new_jobs.csv", index=False)
 
     # Log a message indicating how many jobs were successfully scraped and saved to the CSV file
     logging.info(f"Successfully scraped {len(data)} jobs and saved to jobs.csv")
 
+#filter by employee count
+def get_employee_count(company_name: str) -> int:
+    a=8
 
-data = scrape_linkedin_jobs("Data analyst", "US")
+
+#filter by description
+def filter_by_description(desc : str) -> bool:
+    bad_substring = ["4+", "4 +", "5+", "5 +"]
+    for bad_string in bad_substring:
+        if bad_string in desc:
+            return True
+    return False
+
+
+#filter by title
+def filter_by_title(title: str) -> bool:
+    bad_substring = ["senior", "solutions", "data", "frontend", "remote"]
+
+    for bad_string in bad_substring:
+        if bad_string in title:
+            return True
+    return False
+
+
+# max 1 week ago
+def filter_by_date (date_posted : str) -> bool:
+    if ("month" in date_posted) :
+        return True
+    if ("week" in date_posted and "1" not in date_posted):
+        return True
+    return False
+
+
+# going for exclusion instead of inclusion to not miss out on opportunities because of misspelling.
+def filter_by_location(location: str) -> bool:
+    bad_locations = ["netanya","modiin","haifa","herzliya"]
+
+    for bad_loc in bad_locations:
+        if bad_loc in location:
+            return True
+    return False
+
+def clean_string(input_string: str) -> str:
+    # Remove new lines
+    cleaned_string = input_string.replace("\n", " ")
+    # Remove "Show more"
+    cleaned_string = cleaned_string.replace("Show more", "")
+    return cleaned_string.strip()
+
+
+data = scrape_linkedin_jobs("software engineer", "israel", 1)
 save_job_data(data)
