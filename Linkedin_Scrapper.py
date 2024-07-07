@@ -1,5 +1,7 @@
 # Import necessary packages for web scraping and logging
 import logging
+
+from pandas import DataFrame
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -12,8 +14,16 @@ import time
 # Configure logging settings
 logging.basicConfig(filename="scraping.log", level=logging.INFO)
 
+company_skip = 0
+title_skip = 0
+location_skip = 0
+date_skip = 0
+reviewed = 0
+total_viewed=0
+
 
 def scrape_linkedin_jobs(job_title: str, location: str, pages: int = None) -> list:
+    global total_viewed
     """
     Scrape job listings from LinkedIn based on job title and location.
 
@@ -35,10 +45,19 @@ def scrape_linkedin_jobs(job_title: str, location: str, pages: int = None) -> li
     """
 
     # Log a message indicating that we're starting a LinkedIn job search
+    logging.info(f'*************************************')
     logging.info(f'Starting LinkedIn job scrape for "{job_title}" in "{location}"...')
 
     # Sets the pages to scrape if not provided
     pages = pages or 1
+
+    #Create a dataframe from reviewed jobs, if new create an empty one
+    try:
+        reviewed_jobs_df = pd.read_csv("reviewed_jobs.csv")
+        logging.info(f"read {len(reviewed_jobs_df)} of reviewed jobs")
+    except Exception as e:
+        columns = ['title', 'company']
+        reviewed_jobs_df = pd.DataFrame(columns=columns)
 
     # Set up the Selenium web driver
     driver = webdriver.Chrome()
@@ -51,15 +70,16 @@ def scrape_linkedin_jobs(job_title: str, location: str, pages: int = None) -> li
     driver = webdriver.Chrome(options=options)
 
     # Navigate to the LinkedIn job search page with the given job title and location
+    #f_TPR=r604800 - past week, its seconds
     driver.get(
-        f"https://www.linkedin.com/jobs/search/?keywords={job_title}&location={location}"
+        f"https://www.linkedin.com/jobs/search/?keywords={job_title}&location={location}&f_TPR=r604800"
     )
 
     # Scroll through the first 50 pages of search results on LinkedIn
     for i in range(pages):
 
         # Log the current page number
-        logging.info(f"Scrolling to bottom of page {i+1}...")
+        logging.info(f"Scrolling to bottom of page {i + 1}...")
 
         # Scroll to the bottom of the page using JavaScript
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
@@ -80,7 +100,7 @@ def scrape_linkedin_jobs(job_title: str, location: str, pages: int = None) -> li
             logging.info("Show more button not found, retrying...")
 
         # Wait for a random amount of time before scrolling to the next page
-        time.sleep(1)
+        time.sleep(random.randint(2,5))
 
     # Scrape the job postings
     jobs = []
@@ -89,6 +109,7 @@ def scrape_linkedin_jobs(job_title: str, location: str, pages: int = None) -> li
         "div",
         class_="base-card relative w-full hover:no-underline focus:no-underline base-card--link base-search-card base-search-card--link job-search-card",
     )
+    total_viewed = len(job_listings)
 
     try:
         for job in job_listings:
@@ -101,6 +122,11 @@ def scrape_linkedin_jobs(job_title: str, location: str, pages: int = None) -> li
                 job_company = job.find(
                     "h4", class_="base-search-card__subtitle"
                 ).text.strip()
+
+                #skipped viewed jobs, only need new ones
+                if (filter_viewed_jobs(job_company, job_title, reviewed_jobs_df)):
+                    continue
+
                 # job location
                 job_location = job.find(
                     "span", class_="job-search-card__location"
@@ -112,16 +138,18 @@ def scrape_linkedin_jobs(job_title: str, location: str, pages: int = None) -> li
                     "time", class_="job-search-card__listdate"
                 )
                 #sometimes date has the --new postfix
-                job_date = job_date.text.strip() if (job_date is not None ) else (job.find("time", class_="job-search-card__listdate--new").text.strip())
+                job_date = job_date.text.strip() if (job_date is not None) else (
+                    job.find("time", class_="job-search-card__listdate--new").text.strip())
 
                 #apply filters
-                if (filter_by_title(job_title.lower()) or filter_by_date(job_date.lower()) or filter_by_location(job_location.lower())):
+                if (filter_jobs(job_company, job_title, job_location, job_date)):
                     continue
 
+                #sleep to not pass request limit
+                time.sleep(random.randrange(1,4))
 
                 # Navigate to the job posting page and scrape the description
                 driver.get(apply_link)
-
 
                 # Use try-except block to handle exceptions when retrieving job description
                 try:
@@ -135,7 +163,7 @@ def scrape_linkedin_jobs(job_title: str, location: str, pages: int = None) -> li
 
                     #clean job description
                     job_description = clean_string(job_description)
-                    if(filter_by_description(job_description.lower())):
+                    if (filter_by_description(job_description.lower())):
                         continue
 
                 # Handle the AttributeError exception that may occur if the element is not found
@@ -163,7 +191,7 @@ def scrape_linkedin_jobs(job_title: str, location: str, pages: int = None) -> li
                     }
                 )
                 # Logging scrapped job with company and location information
-                logging.info(f'Scraped "{job_title}" at {job_company} in {job_location} from  {job_date}...')
+                logging.info(f'Found "{job_title}" at {job_company} in {job_location} from  {job_date}...')
             #if a single job fails not all should fail.
             except Exception as e:
                 logging.error(f"An error occurred while scraping jobs: {str(e)}")
@@ -186,6 +214,7 @@ def scrape_linkedin_jobs(job_title: str, location: str, pages: int = None) -> li
 
 
 def save_job_data(data: dict) -> None:
+    global company_skip, title_skip, location_skip, date_skip, reviewed , total_viewed
     """
     Save job data to a CSV file.
 
@@ -197,22 +226,61 @@ def save_job_data(data: dict) -> None:
     """
 
     # Create a pandas DataFrame from the job data dictionary
-    df = pd.DataFrame(data)
+    new_jobs_df = pd.DataFrame(data)
+    new_jobs_df = new_jobs_df.drop_duplicates(subset=['company', 'title'])
 
     # Save the DataFrame to a CSV file without including the index column
-    df.to_csv("new_jobs.csv", index=False)
+    new_jobs_df.to_csv("new_jobs.csv", index=False)
+
+    logging.info (f"skipping stats by filter - \n Total viewed: {total_viewed}\n Company: {company_skip}, Title: {title_skip}, Location: {location_skip}, Date: {date_skip}, Viewed previously: {reviewed}")
 
     # Log a message indicating how many jobs were successfully scraped and saved to the CSV file
-    logging.info(f"Successfully scraped {len(data)} jobs and saved to jobs.csv")
+    logging.info(f"Successfully scraped {len(new_jobs_df)} jobs and saved to new_jobs.csv")
 
-#filter by employee count
+
+def filter_jobs(job_company, job_title, job_location, job_date):
+    global company_skip, title_skip, location_skip, date_skip
+
+    if filter_by_company(job_company.lower()):
+        logging.info(f"++++ skipping {job_title} from {job_company} because of Company")
+        company_skip += 1
+        return True
+
+    if filter_by_title(job_title.lower()):
+        logging.info(f"++++ skipping {job_title} from {job_company} because of Title")
+        title_skip += 1
+        return True
+
+
+    elif filter_by_location(job_location.lower()):
+        logging.info(f"++++ skipping {job_title} from {job_company} because of Location")
+        location_skip += 1
+        return True
+
+    elif filter_by_date(job_date.lower()):
+        logging.info(f"++++ skipping {job_title} from {job_company} because of Date")
+        date_skip += 1
+        return True
+
+    return False
+
+
+#filter by company name, later on employee count
 def get_employee_count(company_name: str) -> int:
-    a=8
+    a = 8
+
+
+def filter_by_company(company_name: str) -> bool:
+    bad_companies = ["sqlink", "check point" , "elbit" , "rafael", "microsoft" , "wix"]
+    for company in bad_companies:
+        if company in company_name:
+            return True
+    return False
 
 
 #filter by description
-def filter_by_description(desc : str) -> bool:
-    bad_substring = ["4+", "4 +", "5+", "5 +"]
+def filter_by_description(desc: str) -> bool:
+    bad_substring = ["4+", "4 +", "5+", "5 +", "PHP" , "5 years" , "six years"]
     for bad_string in bad_substring:
         if bad_string in desc:
             return True
@@ -221,7 +289,10 @@ def filter_by_description(desc : str) -> bool:
 
 #filter by title
 def filter_by_title(title: str) -> bool:
-    bad_substring = ["senior", "solutions", "data", "frontend", "remote"]
+    bad_substring = ["senior", "solutions", "data", "frontend", "remote", "react", "experienced" , "embedded", "qa" , "devops" , "android", "architect", "principal"
+                     ,"automation" , "lead" ,"leader",  "product", "business intelligence" "c++", "angular" , "manager" , "sr." , "support" , "sre" , "system"
+                     ,"sql" " ai ", "solution" , "firmware" , "ios " , "machine learning" , "decsecops" , "hardware", " it " , " go ","artificial intelligence" , "javascript"
+                     ,"++" , "algorithm" , "unity" , "mobile" , "sap" , "idm" , "account executive"]
 
     for bad_string in bad_substring:
         if bad_string in title:
@@ -230,8 +301,8 @@ def filter_by_title(title: str) -> bool:
 
 
 # max 1 week ago
-def filter_by_date (date_posted : str) -> bool:
-    if ("month" in date_posted) :
+def filter_by_date(date_posted: str) -> bool:
+    if ("month" in date_posted):
         return True
     if ("week" in date_posted and "1" not in date_posted):
         return True
@@ -240,12 +311,24 @@ def filter_by_date (date_posted : str) -> bool:
 
 # going for exclusion instead of inclusion to not miss out on opportunities because of misspelling.
 def filter_by_location(location: str) -> bool:
-    bad_locations = ["netanya","modiin","haifa","herzliya"]
+    bad_locations = ["netanya", "modiin", "haifa", "herzliya", "remote", "hod hasharon" , "petah tikva", "raanana" ,"yokneam", "yoqneam" , "jerusalem",
+                     "rosh haayin" , "rehovot" , "ramat hasharon", "karmiel" , "ahihud" , "be'er sheva", "veer yaakov", "kfar saba" , "omer", "south district"]
 
     for bad_loc in bad_locations:
         if bad_loc in location:
             return True
     return False
+
+
+def filter_viewed_jobs(company: str, job_title: str, reviewed_jobs_df: DataFrame) -> bool:
+    global reviewed
+    #if empty do not skip
+    empty_df = not reviewed_jobs_df.query('company == @company and title == @job_title').empty
+    if empty_df:
+        logging.info(f"---- skipping {job_title} from {company}")
+        reviewed+=1
+    return empty_df
+
 
 def clean_string(input_string: str) -> str:
     # Remove new lines
@@ -255,5 +338,62 @@ def clean_string(input_string: str) -> str:
     return cleaned_string.strip()
 
 
-data = scrape_linkedin_jobs("software engineer", "israel", 1)
-save_job_data(data)
+
+
+
+
+
+def start_scrape(keywords, location :str  , pages_to_review : int):
+    first = True
+
+    for key in keywords:
+        data = scrape_linkedin_jobs(key, location, pages_to_review)
+        #if found something
+        if len(data) != 0:
+            if first:
+                total_df=data
+                first = False
+            else:
+                total_df.extend(data)
+
+    #if found nothing
+    if first:
+        return None , 0
+    else:
+        return total_df , 1
+
+
+#
+# data = scrape_linkedin_jobs("software engineer", "israel", PAGES_TO_REVIEW)
+# data2 = scrape_linkedin_jobs("software developer", "israel", PAGES_TO_REVIEW)
+# data3 = scrape_linkedin_jobs("backend", "israel", PAGES_TO_REVIEW)
+# data4 = scrape_linkedin_jobs("developer", "israel", PAGES_TO_REVIEW)
+#
+# data_frames = [data, data2, data3, data4]
+#
+# non_empty_data_frames = [df for df in data_frames if not len(df) == 0]
+#
+# if(len (non_empty_data_frames))
+# total_df  =  non_empty_data_frames if len pd.concat(non_empty_data_frames, ignore_index=True)
+#
+# # data_combined2= data.append(data2)
+
+# data2 = scrape_linkedin_jobs("software developer", "israel", 30).append(data1)
+# data3 = scrape_linkedin_jobs("backend", "israel", 30).append(data2)
+# data4 = scrape_linkedin_jobs("developer", "israel", 30).append(data3)
+
+PAGES_TO_REVIEW = 30
+keywords = ["software engineer", "software developer", "backend", "developer"]
+
+
+data,code = start_scrape(keywords, "israel", PAGES_TO_REVIEW)
+
+if(code == 0):
+    logging.info("nothing found... exiting")
+    logging.info (f"skipping stats by filter - \n Total viewed: {total_viewed}\n Company: {company_skip}, Title: {title_skip}, Location: {location_skip}, Date: {date_skip}, Viewed previously: {reviewed}")
+
+else:
+    save_job_data(data)
+
+
+
