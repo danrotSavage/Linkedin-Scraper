@@ -104,12 +104,13 @@ def scrape_linkedin_jobs(job_title: str, location: str, pages: int = None) -> li
 
     # Scrape the job postings
     jobs = []
+    unwanted_jobs = []
     soup = BeautifulSoup(driver.page_source, "html.parser")
     job_listings = soup.find_all(
         "div",
         class_="base-card relative w-full hover:no-underline focus:no-underline base-card--link base-search-card base-search-card--link job-search-card",
     )
-    total_viewed = len(job_listings)
+    total_viewed += len(job_listings)
 
     try:
         for job in job_listings:
@@ -143,6 +144,17 @@ def scrape_linkedin_jobs(job_title: str, location: str, pages: int = None) -> li
 
                 #apply filters
                 if (filter_jobs(job_company, job_title, job_location, job_date)):
+                    unwanted_jobs.append(
+                        {
+                            "title": job_title,
+                            "company": job_company,
+                            "location": job_location,
+                            "description": "",
+                            "date": job_date,
+                            "link": apply_link,
+                            "employees": -1,
+                        }
+                    )
                     continue
 
                 #sleep to not pass request limit
@@ -210,10 +222,10 @@ def scrape_linkedin_jobs(job_title: str, location: str, pages: int = None) -> li
     driver.quit()
 
     # Return the jobs list
-    return jobs
+    return jobs, unwanted_jobs
 
 
-def save_job_data(data: dict) -> None:
+def save_job_data(jobs: dict, unwanted_jobs) -> None:
     global company_skip, title_skip, location_skip, date_skip, reviewed , total_viewed
     """
     Save job data to a CSV file.
@@ -226,16 +238,22 @@ def save_job_data(data: dict) -> None:
     """
 
     # Create a pandas DataFrame from the job data dictionary
-    new_jobs_df = pd.DataFrame(data)
+    new_jobs_df = pd.DataFrame(jobs)
     new_jobs_df = new_jobs_df.drop_duplicates(subset=['company', 'title'])
+
+    unwanted_jobs_df = pd.DataFrame(unwanted_jobs)
+    unwanted_jobs_df = unwanted_jobs_df.drop_duplicates(subset=['company', 'title'])
 
     # Save the DataFrame to a CSV file without including the index column
     new_jobs_df.to_csv("new_jobs.csv", index=False)
+    unwanted_jobs_df.to_csv("unwanted_jobs.csv", index=False)
+
 
     logging.info (f"skipping stats by filter - \n Total viewed: {total_viewed}\n Company: {company_skip}, Title: {title_skip}, Location: {location_skip}, Date: {date_skip}, Viewed previously: {reviewed}")
 
     # Log a message indicating how many jobs were successfully scraped and saved to the CSV file
     logging.info(f"Successfully scraped {len(new_jobs_df)} jobs and saved to new_jobs.csv")
+    logging.info(f"Successfully saved {len(unwanted_jobs_df)} unwanted jobs and saved to unwanted_jobs.csv")
 
 
 def filter_jobs(job_company, job_title, job_location, job_date):
@@ -280,7 +298,7 @@ def filter_by_company(company_name: str) -> bool:
 
 #filter by description
 def filter_by_description(desc: str) -> bool:
-    bad_substring = ["4+", "4 +", "5+", "5 +", "PHP" , "5 years" , "six years"]
+    bad_substring = ["4+", "4 +", "5+", "5 +", "PHP" , "5 years" , "six years","8+"]
     for bad_string in bad_substring:
         if bad_string in desc:
             return True
@@ -292,7 +310,7 @@ def filter_by_title(title: str) -> bool:
     bad_substring = ["senior", "solutions", "data", "frontend", "remote", "react", "experienced" , "embedded", "qa" , "devops" , "android", "architect", "principal"
                      ,"automation" , "lead" ,"leader",  "product", "business intelligence" "c++", "angular" , "manager" , "sr." , "support" , "sre" , "system"
                      ,"sql" " ai ", "solution" , "firmware" , "ios " , "machine learning" , "decsecops" , "hardware", " it " , " go ","artificial intelligence" , "javascript"
-                     ,"++" , "algorithm" , "unity" , "mobile" , "sap" , "idm" , "account executive"]
+                     ,"++" , "algorithm" , "unity" , "mobile" , "sap" , "idm" , "account executive" , " staff ", "infrastructure"]
 
     for bad_string in bad_substring:
         if bad_string in title:
@@ -344,23 +362,38 @@ def clean_string(input_string: str) -> str:
 
 
 def start_scrape(keywords, location :str  , pages_to_review : int):
-    first = True
+    first_jobs = True
+    first_unwanted = True
+
+    jobs_df = None
+    unwanted_jobs_df = None
 
     for key in keywords:
-        data = scrape_linkedin_jobs(key, location, pages_to_review)
+        jobs, unwanted_jobs = scrape_linkedin_jobs(key, location, pages_to_review)
         #if found something
-        if len(data) != 0:
-            if first:
-                total_df=data
-                first = False
+        if len(jobs) != 0:
+            if first_jobs:
+                jobs_df=jobs
+                first_jobs = False
             else:
-                total_df.extend(data)
+                jobs_df.extend(jobs)
+
+        if len(unwanted_jobs) != 0:
+            if first_unwanted:
+                unwanted_jobs_df=unwanted_jobs
+                first_unwanted = False
+            else:
+                unwanted_jobs_df.extend(unwanted_jobs)
+
+
+
+
 
     #if found nothing
-    if first:
-        return None , 0
+    if first_jobs and first_unwanted:
+        return None ,None, 0
     else:
-        return total_df , 1
+        return jobs_df, unwanted_jobs_df , 1
 
 
 #
@@ -382,18 +415,26 @@ def start_scrape(keywords, location :str  , pages_to_review : int):
 # data3 = scrape_linkedin_jobs("backend", "israel", 30).append(data2)
 # data4 = scrape_linkedin_jobs("developer", "israel", 30).append(data3)
 
-PAGES_TO_REVIEW = 30
-keywords = ["software engineer", "software developer", "backend", "developer"]
+PAGES_TO_REVIEW = 20
+keywords1 = ["Software Engineer", "Software Developer", "Backend Engineer", "Backend Developer" ]
+keywords2 = ["Developer", "Programmer", "Full Stack Developer", "Junior Developer"]
+
+start_time = time.time()
 
 
-data,code = start_scrape(keywords, "israel", PAGES_TO_REVIEW)
+
+
+jobs, unwanted_jobs,code = start_scrape(keywords1, "israel", PAGES_TO_REVIEW)
+#jobs, unwanted_jobs,code = start_scrape(keywords2, "israel", PAGES_TO_REVIEW)
 
 if(code == 0):
     logging.info("nothing found... exiting")
     logging.info (f"skipping stats by filter - \n Total viewed: {total_viewed}\n Company: {company_skip}, Title: {title_skip}, Location: {location_skip}, Date: {date_skip}, Viewed previously: {reviewed}")
 
 else:
-    save_job_data(data)
+    save_job_data(jobs,unwanted_jobs)
+
+print(f"The program took: {round(time.time() - start_time)} seconds to run")
 
 
 
