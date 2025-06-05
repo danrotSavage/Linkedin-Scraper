@@ -147,10 +147,6 @@ def scrape_linkedin_jobs(job_title: str, location: str, pages: int = None) -> li
 
 
 
-        print("scrolling down")
-        time.sleep(random.randint(2, 4))  # wait for page to load
-
-
         cards = driver.find_elements(By.CLASS_NAME, "job-card-container")
 
         print("-------------printing cards-----------")
@@ -188,15 +184,11 @@ def scrape_linkedin_jobs(job_title: str, location: str, pages: int = None) -> li
                 if filter_viewed_jobs(job_company, job_title, reviewed_jobs_df):
                     continue
 
-                # job location
                 job_location = job.find(
                     "span", class_="job-search-card__location"
                 ).text.strip()
-                # job link
                 apply_link = job.find("a", class_="base-card__full-link")["href"]
-                # job posting date
                 job_date = job.find("time", class_="job-search-card__listdate")
-                # sometimes date has the --new postfix
                 job_date = (
                     job_date.text.strip()
                     if (job_date is not None)
@@ -292,7 +284,6 @@ def scrape_linkedin_jobs(job_title: str, location: str, pages: int = None) -> li
 
     # Return the jobs list
     return jobs, unwanted_jobs
-
 
 def save_job_data(jobs: dict, unwanted_jobs, new_jobs_file, unwanted_jobs_file) -> None:
     global company_skip, title_skip, location_skip, date_skip, reviewed, total_viewed
