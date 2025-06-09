@@ -4,6 +4,7 @@ import ast
 import time
 import logging
 import os
+from datetime import datetime
 
 from scraper.logic.scraper import start_scrape
 from scraper.io.save import save_job_data
@@ -15,7 +16,11 @@ REVIEWED_JOBS = "./csv/reviewed_jobs.csv"
 def main():
     # Configure logging
     os.makedirs("./logs", exist_ok=True)
-    logging.basicConfig(filename="./logs/scraping.log", level=logging.INFO)
+    log_filename = f"./logs/scraping_{datetime.now().strftime('%Y-%m-%d__%H-%M-%S')}.log"
+    logging.basicConfig(filename=log_filename, level=logging.INFO)
+
+
+    logger =  logging.getLogger(__name__)
 
 
     # Argument parsing
@@ -31,7 +36,7 @@ def main():
     keywords_list = ast.literal_eval(args.keywords)
 
     # Log params
-    logging.info(
+    logger.info(
         f"location: {args.location}, pages: {args.pages}, jobsFile: {args.jobsFile}, unwantedJobsFile: {args.unwantedJobsFile}, keywords: {args.keywords}"
     )
     print(
@@ -44,19 +49,21 @@ def main():
 
     jobs, unwanted_jobs, code = start_scrape(keywords_list, args.location, args.pages)
 
-    #todo add cases of 1,2,3 code
+    #todo change other cases(did only 3)
     if code == 0:
-        logging.info("nothing found... exiting")
-        logging.info(
-            f"skipping stats by filter - \n Total viewed: {sl.total_viewed}\n Company: {sl.company_skip}, Title: {sl.title_skip}, Location: {sl.location_skip}, Date: {sl.date_skip}, Viewed previously: {sl.reviewed}"
-        )
-
-    else:
+        logger.info("No jobs or unwanted jobs found. Exiting.")
+    elif code == 1:
+        logger.info("Only unwanted jobs found. Saving them...")
+        save_job_data([], unwanted_jobs, args.jobsFile, args.unwantedJobsFile)
+        combine_jobs(REVIEWED_JOBS, "", args.unwantedJobsFile)
+    elif code == 2:
+        logger.info("Only jobs found. Saving them...")
+        save_job_data(jobs, [], args.jobsFile, args.unwantedJobsFile)
+        combine_jobs(REVIEWED_JOBS, args.jobsFile, "")
+    elif code == 3:
         save_job_data(jobs, unwanted_jobs, args.jobsFile, args.unwantedJobsFile)
+        combine_jobs(REVIEWED_JOBS, jobs, unwanted_jobs)
 
-    #todo add another code for didn't find jobs but have unwanted.
-    #if no new jobs found still could find jobs that are not useful
-    combine_jobs(REVIEWED_JOBS, args.jobsFile, args.unwantedJobsFile)
 
     print(f"The program took: {round(time.time() - start_time)} seconds to run")
 

@@ -21,7 +21,7 @@ from datetime import datetime
 os.makedirs("./logs", exist_ok=True)
 log_filename = f"./logs/scraping_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
 
-logging.basicConfig(filename=log_filename, level=logging.INFO)
+# logging.basicConfig(filename=log_filename, level=logging.INFO)
 
 company_skip = 0
 title_skip = 0

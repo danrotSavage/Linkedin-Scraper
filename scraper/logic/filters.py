@@ -2,30 +2,37 @@ import logging
 
 from pandas import DataFrame
 
+logger = logging.getLogger(__name__)
+
+# def filter_dec(func):
+#     def wrapper(parameter, counter):
+#         if (func(parameter)):
+#             counter+=1
+#             return True
+#         return False
 
 def filter_by_company(company_name: str) -> bool:
     bad_companies = ["sqlink", "check point", "elbit", "rafael", "microsoft", "wix"]
     return any(c in company_name for c in bad_companies)
 
 def filter_by_description(desc: str) -> bool:
-    bad_substring = ["4+", "4 +", "5+", "5 +", "PHP", "5 years", "six years", "8+"]
+    bad_substring = [ "5+", "5 +", "PHP", "5 years", "six years", "8+"]
     return any(b in desc for b in bad_substring)
 
 def filter_by_title(title: str) -> bool:
     bad_substring = [
         "solutions", "data", "frontend", "remote", "react", "embedded", "qa", "devops", "android",
         "architect", "principal", "automation", "lead", "leader", "product", "business intelligence",
-        "c++", "angular", "manager", "sr.", "support", "sre", "system", "sql", " ai ", "solution",
+        "c++", "angular", "manager", "support", "sre", "system", "sql", " ai ", "solution",
         "firmware", "ios ", "machine learning", "decsecops", "hardware", " it ", " go ",
         "artificial intelligence", "javascript", "++", "algorithm", "unity", "mobile", "sap", "idm",
-        "account executive", " staff ", "infrastructure", "cobol",
+        "account executive", " staff ", "cobol",
     ]
     return any(b in title for b in bad_substring)
 
 #if over 1 week
 def filter_by_date(date_posted: str) -> bool:
     return "month" in date_posted or ("week" in date_posted and "1" not in date_posted)
-
 
 def filter_by_location(location: str) -> bool:
     bad_locations = [
@@ -36,19 +43,16 @@ def filter_by_location(location: str) -> bool:
     ]
     return any(b in location for b in bad_locations)
 
-def filter_viewed_jobs(
-    company: str, job_title: str, reviewed_jobs_df: DataFrame
-) -> bool:
-    global reviewed
-    # if empty do not skip
-    empty_df = not reviewed_jobs_df.query(
+
+def filter_viewed_jobs(company: str, job_title: str, reviewed_jobs_df: DataFrame , reviewed: int) -> bool:
+    # if job already found skip
+    match_found  = not reviewed_jobs_df.query(
         "company == @company and title == @job_title"
     ).empty
-    if empty_df:
-        logging.info(f"---- skipping {job_title} from {company}")
+    if match_found:
+        logger.info(f"---- skipping {job_title} from {company}")
         reviewed += 1
-    return empty_df
-
+    return match_found
 
 
 

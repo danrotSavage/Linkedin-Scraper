@@ -13,7 +13,8 @@ cd "$SCRIPT_DIR"
 echo "Running scraper..."
 python -m scraper.cli.call_scraper \
   --location "Israel" \
-  --pages 20 \
+  --pages 2 \
   --jobsFile "./csv/new_jobs.csv" \
   --unwantedJobsFile "./csv/unwanted_jobs.csv" \
-  --keywords '["Software Engineer", "Software Developer", "Backend Engineer", "Backend Developer"]'
+  --keywords '["Software Engineer"]'
+  #--keywords '["Software Engineer", "Software Developer", "Backend Engineer", "Backend Developer"]'

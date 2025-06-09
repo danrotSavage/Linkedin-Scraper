@@ -2,6 +2,7 @@ import json
 
 
 def load_cookies(driver, cookie_file_path):
+
     with open(cookie_file_path, "r") as f:
         cookies = json.load(f)
 
