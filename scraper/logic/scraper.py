@@ -9,6 +9,7 @@ import traceback
 import pandas as pd
 from bs4 import BeautifulSoup
 from selenium import webdriver
+from selenium.common import NoSuchElementException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -16,7 +17,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from scraper.logic.cookies import load_cookies
 from scraper.logic.filters import (
     filter_by_company, filter_by_title, filter_by_location,
-    filter_by_date, filter_by_description, clean_string, filter_viewed_jobs
+    filter_by_date, filter_by_description, filter_viewed_jobs
 )
 
 logger = logging.getLogger(__name__)
@@ -56,7 +57,11 @@ def scrape_linkedin_jobs(job_title: str, location: str, pages: int = 1):
 
     #get new jobs
     jobs, unwanted_jobs = get_all_jobs(driver,job_title,pages,location, reviewed_jobs_df)
-
+    logger.info(
+        f"skipping metrics - company_skip={company_skip}, title_skip={title_skip}, "
+        f"location_skip={location_skip}, date_skip={date_skip}, "
+        f"description_skip={description_skip}, reviewed={reviewed}, total_viewed={total_viewed}"
+    )
 
 
     driver.quit()
@@ -65,7 +70,7 @@ def scrape_linkedin_jobs(job_title: str, location: str, pages: int = 1):
 
 
 def get_all_jobs(driver,job_title,pages,location, reviewed_jobs_df):
-    global total_viewed, description_skip
+    global total_viewed, description_skip, reviewed
     #todo nothing done with unwanted jobs
     jobs = []
     unwanted_jobs = []
@@ -74,7 +79,6 @@ def get_all_jobs(driver,job_title,pages,location, reviewed_jobs_df):
         load_page(driver, job_title, location, page_num)
         time.sleep(2)
 
-        #todo return scroll down
         scroll_down(driver)
 
         cards = driver.find_elements(By.CLASS_NAME, "job-card-container")
@@ -89,7 +93,8 @@ def get_all_jobs(driver,job_title,pages,location, reviewed_jobs_df):
                 document(f"title={title}, company={company}, location={location}, date={date}")
 
 
-                if filter_viewed_jobs(company, title, reviewed_jobs_df , reviewed):
+                if filter_viewed_jobs(company, title, reviewed_jobs_df):
+                    reviewed+=1
                     document("filtered by viewed")
                     continue
 
@@ -123,7 +128,7 @@ def get_all_jobs(driver,job_title,pages,location, reviewed_jobs_df):
 
         total_viewed += len(cards)
 
-    document(f"total_viewed={total_viewed}, jobs={jobs}, unwanted_jobs={unwanted_jobs},")
+    document(f"total_viewed={total_viewed}")
     return jobs, unwanted_jobs
 
 
@@ -176,12 +181,17 @@ def scroll_down(driver):
 ###get data functions
 #get job title,company and location
 def get_job_basic_info (card):
-    title = card.find_element(By.CLASS_NAME, "job-card-list__title--link").text.split("\n")[0]
-    company = card.find_element(By.CLASS_NAME, "artdeco-entity-lockup__subtitle").text
-    location = card.find_element(By.CLASS_NAME, "artdeco-entity-lockup__caption").text
-
-
-    return title.lower() ,company.lower() ,location.lower()
+    try:
+        title = card.find_element(By.CLASS_NAME, "job-card-list__title--link").text.split("\n")[0]
+        company = card.find_element(By.CLASS_NAME, "artdeco-entity-lockup__subtitle").text
+        location = card.find_element(By.CLASS_NAME, "artdeco-entity-lockup__caption").text
+        return title.lower(), company.lower(), location.lower()
+    except NoSuchElementException as e:
+        logger.warning(f"Missing element in job card: {e}")
+        return None, None, None
+    except Exception as e:
+        logger.error(f"Unexpected error while parsing job card: {e}")
+        return None, None, None
 
 def get_job_date(card):
     date_one = card.find_element(By.CLASS_NAME, "job-card-container__footer-item").text.split("\n")[0]

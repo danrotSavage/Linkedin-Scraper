@@ -12,11 +12,11 @@ logger = logging.getLogger(__name__)
 #         return False
 
 def filter_by_company(company_name: str) -> bool:
-    bad_companies = ["sqlink", "check point", "elbit", "rafael", "microsoft", "wix"]
+    bad_companies = ["sqlink", "check point", "elbit", "rafael", "microsoft", "wix", "amazon", "google"]
     return any(c in company_name for c in bad_companies)
 
 def filter_by_description(desc: str) -> bool:
-    bad_substring = [ "5+", "5 +", "PHP", "5 years", "six years", "8+"]
+    bad_substring = [ "5+", "5 +", "PHP", "5 years", "six years", "8+", "6+", "7+", "c++", "6 years", "7 years"]
     return any(b in desc for b in bad_substring)
 
 def filter_by_title(title: str) -> bool:
@@ -26,7 +26,7 @@ def filter_by_title(title: str) -> bool:
         "c++", "angular", "manager", "support", "sre", "system", "sql", " ai ", "solution",
         "firmware", "ios ", "machine learning", "decsecops", "hardware", " it ", " go ",
         "artificial intelligence", "javascript", "++", "algorithm", "unity", "mobile", "sap", "idm",
-        "account executive", " staff ", "cobol",
+        "account executive", " staff ", "cobol", "graduate",
     ]
     return any(b in title for b in bad_substring)
 
@@ -39,19 +39,20 @@ def filter_by_location(location: str) -> bool:
         "netanya", "modiin", "haifa", "remote", "hod hasharon", "petah tikva", "raanana", "yokneam",
         "yoqneam", "jerusalem", "rosh haayin", "rehovot", "ramat hasharon", "karmiel", "ahihud",
         "be'er sheva", "veer yaakov", "kfar saba", "omer", "south district", "afikim", "yakum",
-        "migdal haemek", "north district",
+        "migdal haemek", "north district", "herzliya", "san francisco", "san jose" , "italy", "india",
+        "yakum",
     ]
     return any(b in location for b in bad_locations)
 
 
-def filter_viewed_jobs(company: str, job_title: str, reviewed_jobs_df: DataFrame , reviewed: int) -> bool:
+def filter_viewed_jobs(company: str, job_title: str, reviewed_jobs_df: DataFrame) -> bool:
+    global rev
     # if job already found skip
     match_found  = not reviewed_jobs_df.query(
         "company == @company and title == @job_title"
     ).empty
     if match_found:
         logger.info(f"---- skipping {job_title} from {company}")
-        reviewed += 1
     return match_found
 
 

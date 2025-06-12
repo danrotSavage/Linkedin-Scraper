@@ -27,8 +27,6 @@ def main():
     parser = argparse.ArgumentParser(description="LinkedIn Job Scraper CLI")
     parser.add_argument("--location", type=str, required=False, help="Job location")
     parser.add_argument("--pages", type=int, required=False, help="Number of scroll pages")
-    parser.add_argument("--jobsFile", type=str, required=True, help="Output file for wanted jobs")
-    parser.add_argument("--unwantedJobsFile", type=str, required=True, help="Output file for unwanted jobs")
     parser.add_argument("--keywords", type=str, required=True, help="List of job titles (as Python list string)")
 
 
@@ -37,7 +35,7 @@ def main():
 
     # Log params
     logger.info(
-        f"location: {args.location}, pages: {args.pages}, jobsFile: {args.jobsFile}, unwantedJobsFile: {args.unwantedJobsFile}, keywords: {args.keywords}"
+        f"location: {args.location}, pages: {args.pages}, keywords: {args.keywords}"
     )
     print(
         f"Scraping jobs for: {keywords_list} in {args.location} (pages={args.pages})...",
@@ -54,14 +52,14 @@ def main():
         logger.info("No jobs or unwanted jobs found. Exiting.")
     elif code == 1:
         logger.info("Only unwanted jobs found. Saving them...")
-        save_job_data([], unwanted_jobs, args.jobsFile, args.unwantedJobsFile)
-        combine_jobs(REVIEWED_JOBS, "", args.unwantedJobsFile)
+        save_job_data([], unwanted_jobs)
+        combine_jobs(REVIEWED_JOBS, "")
     elif code == 2:
         logger.info("Only jobs found. Saving them...")
-        save_job_data(jobs, [], args.jobsFile, args.unwantedJobsFile)
+        save_job_data(jobs, [])
         combine_jobs(REVIEWED_JOBS, args.jobsFile, "")
     elif code == 3:
-        save_job_data(jobs, unwanted_jobs, args.jobsFile, args.unwantedJobsFile)
+        save_job_data(jobs, unwanted_jobs)
         combine_jobs(REVIEWED_JOBS, jobs, unwanted_jobs)
 
 
