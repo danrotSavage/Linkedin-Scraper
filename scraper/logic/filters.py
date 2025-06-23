@@ -12,11 +12,15 @@ logger = logging.getLogger(__name__)
 #         return False
 
 def filter_by_company(company_name: str) -> bool:
-    bad_companies = ["sqlink", "check point", "elbit", "rafael", "microsoft", "wix", "amazon", "google"]
+    bad_companies = ["sqlink", "check point", "elbit", "rafael", "microsoft", "wix", "amazon", "google" ,
+                     "millennium"]
     return any(c in company_name for c in bad_companies)
 
 def filter_by_description(desc: str) -> bool:
-    bad_substring = [ "5+", "5 +", "PHP", "5 years", "six years", "8+", "6+", "7+", "c++", "6 years", "7 years"]
+    bad_substring = ["5+", "5 +", "5 years", "6+", "6 +", "6 years", "7+", "7 +", "7 years", "seven years", "8+", "8 +",
+                     "8 years", "eight years", "9+", "9 +", "9 years", "nine years", "10+", "10 +", "10 years",
+                     "ten years", "six years", "c++", "PHP"]
+
     return any(b in desc for b in bad_substring)
 
 def filter_by_title(title: str) -> bool:
@@ -40,7 +44,7 @@ def filter_by_location(location: str) -> bool:
         "yoqneam", "jerusalem", "rosh haayin", "rehovot", "ramat hasharon", "karmiel", "ahihud",
         "be'er sheva", "veer yaakov", "kfar saba", "omer", "south district", "afikim", "yakum",
         "migdal haemek", "north district", "herzliya", "san francisco", "san jose" , "italy", "india",
-        "yakum",
+        "yakum", "australia", "sydney", "netherlands" ,"chile" ,
     ]
     return any(b in location for b in bad_locations)
 

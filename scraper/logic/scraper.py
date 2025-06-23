@@ -34,7 +34,6 @@ def document(message : str):
     #logger.info(message)
 
 
-#todo log all the paremeters skips and reviewed
 def scrape_linkedin_jobs(job_title: str, location: str, pages: int = 1):
     global total_viewed, company_skip, title_skip, location_skip, date_skip
     logger.info(f"Starting LinkedIn job scrape for job_title={job_title} in location={location} with pages={pages}...")
@@ -71,7 +70,6 @@ def scrape_linkedin_jobs(job_title: str, location: str, pages: int = 1):
 
 def get_all_jobs(driver,job_title,pages,location, reviewed_jobs_df):
     global total_viewed, description_skip, reviewed
-    #todo nothing done with unwanted jobs
     jobs = []
     unwanted_jobs = []
     for page_num in range(pages):
@@ -90,8 +88,10 @@ def get_all_jobs(driver,job_title,pages,location, reviewed_jobs_df):
                 title, company, location = get_job_basic_info(card)
                 date = get_job_date(card)
 
-                document(f"title={title}, company={company}, location={location}, date={date}")
 
+                document(f"title={title}, company={company}, location={location}, date={date}")
+                if not title or not company or not location:
+                    continue
 
                 if filter_viewed_jobs(company, title, reviewed_jobs_df):
                     reviewed+=1
@@ -104,7 +104,7 @@ def get_all_jobs(driver,job_title,pages,location, reviewed_jobs_df):
                     continue
 
 
-                #todo get date from here.
+                description = link = None
                 description, link, date_optional =  get_job_description(driver, card)
                 if date_optional:
                     date = date_optional
@@ -194,9 +194,13 @@ def get_job_basic_info (card):
         return None, None, None
 
 def get_job_date(card):
-    date_one = card.find_element(By.CLASS_NAME, "job-card-container__footer-item").text.split("\n")[0]
+    try:
+        date = card.find_element(By.CLASS_NAME, "job-card-container__footer-item").text.split("\n")[0]
+        return date.lower()
+    except Exception as e:
+        logger.error(f"Unexpected error while parsing date: {e}")
+        return None
 
-    return date_one.lower()
 
 def get_job_description(driver, card):
     description = link = date =  None
@@ -218,7 +222,6 @@ def get_job_description(driver, card):
 
 
 
-        #todo remove About the job
         time.sleep(random.uniform(1, 2))
         description_unfromatted = driver.find_element(By.ID, "job-details").text
         description = description_unfromatted.replace("\n", " ")
@@ -286,7 +289,7 @@ def filter_jobs(job_company, job_title, job_location, job_date):
         location_skip += 1
         return True
 
-    elif filter_by_date(job_date.lower()):
+    elif job_date and filter_by_date(job_date.lower()):
         logger.info(f"++++ skipping {job_title} from {job_company} because of Date")
         date_skip += 1
         return True
